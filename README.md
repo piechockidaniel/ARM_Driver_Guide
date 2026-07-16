@@ -1,17 +1,21 @@
 # ARM-Guard
 
-ARM-Guard is a privacy-first drowsiness-detection prototype targeted at Arm64 edge hardware. The current implementation is aligned with the phased action plan in `docs/action plan/` and is now anchored to the device bundle in `docs/device/`: **Orange Pi 5 Plus / Rockchip RK3588**.
+ARM-Guard is a privacy-first drowsiness-detection prototype targeted at Arm64 edge hardware. The project is aligned with `docs/action plan/` and anchored to the device bundle in `docs/device/`: **Orange Pi 5 Plus / Rockchip RK3588**.
 
-This iteration implements a concrete baseline around:
+The repository now covers two baseline modes:
 
-- simulated input frames and vehicle context
-- EAR-based drowsiness scoring
-- anonymized event logging
-- `privacy_mode` behavior
-- adaptive baseline calibration
-- progressive alert levels
-- system-health and degraded-mode reporting
-- benchmark and device-emulator commands
+- simulated pipeline for repeatable scoring, calibration, benchmarking, and privacy tests
+- live baseline detector using `OpenCV + MediaPipe FaceMesh` with a `Tkinter` GUI for webcam or video-file input
+
+## Python requirement
+
+Use **Python 3.11** for the live CV stack. The project declares `>=3.11,<3.13` because `MediaPipe` is not part of the validated path on the current global Python 3.13 interpreter in this workspace.
+
+On Windows, the expected command path is:
+
+```bash
+.venv\Scripts\python.exe main.py gui
+```
 
 ## Target device
 
@@ -26,11 +30,12 @@ This iteration implements a concrete baseline around:
 ## Run
 
 ```bash
-python main.py demo
-python main.py calibrate
-python main.py benchmark --iterations 100
-python main.py inspect-device
-python main.py inspect-config
+.venv\Scripts\python.exe -m pip install -e .
+.venv\Scripts\python.exe main.py gui
+.venv\Scripts\python.exe main.py live --camera-index 0 --max-frames 120
+.venv\Scripts\python.exe main.py live --video path\to\video.mp4 --max-frames 300
+.venv\Scripts\python.exe main.py demo
+.venv\Scripts\python.exe main.py benchmark --iterations 100
 ```
 
 ## Repository layout
@@ -45,7 +50,9 @@ src/arm_guard/
   device/               Orange Pi 5 Plus spec and emulator
   domain/               Shared dataclasses and enums
   events/               Anonymized event schema and JSONL logger
+  gui.py                Tkinter dashboard
   integrations/         Simulated context and frame providers
+  live/                 OpenCV capture and MediaPipe FaceMesh baseline
   pipeline/             EAR, scoring, and orchestration
   privacy/              Consent and privacy controls
   profile/              Adaptive profile calibration and persistence
@@ -53,10 +60,12 @@ src/arm_guard/
 tests/                  Smoke and behavior tests
 ```
 
-## Current scope
+## What phase 2 now covers
 
-The project is still using simulated frames instead of a live webcam or video pipeline. That is intentional for this iteration: it lets the repository implement privacy, scoring, benchmarking, calibration, and device-targeting behavior without prematurely hard-coding a computer-vision dependency stack for Orange Pi.
-
-## Next implementation seam
-
-The next risky step is the live landmark backend for webcam/video input on Arm64. That should be chosen explicitly before wiring in heavy dependencies such as OpenCV or MediaPipe.
+- webcam input
+- video-file input
+- face and eye landmark detection through MediaPipe FaceMesh
+- EAR computation from landmarks
+- long-blink and microsleep-like event handling
+- live score, alert level, FPS, latency, and status output
+- anonymized event logging during live sessions

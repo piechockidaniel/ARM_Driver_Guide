@@ -7,9 +7,11 @@ from typing import Any
 from arm_guard.arm.acceleration import ArmAccelerationProfile
 from arm_guard.config import AppConfig
 from arm_guard.device.specs import OrangePi5PlusEmulator, orange_pi_5_plus_spec
+from arm_guard.domain.models import DetectionFrame, DriverContext, RuntimeTelemetry
 from arm_guard.events.logger import EventLogger
 from arm_guard.events.models import AnonymizedDetectionEvent
 from arm_guard.integrations.context import ContextualAlertPolicy, DemoFrameFactory
+from arm_guard.live.deps import require_live_dependencies
 from arm_guard.pipeline.ear import PrivacyPreservingEarEstimator
 from arm_guard.pipeline.engine import ArmGuardPipeline, ProcessingResult
 from arm_guard.pipeline.scoring import DrowsinessScorer
@@ -38,9 +40,9 @@ class ArmGuardApplication:
             config=config,
             ear_estimator=PrivacyPreservingEarEstimator(),
             profiler=profiler,
-            alert_policy=ContextualAlertPolicy(),
-            scorer=DrowsinessScorer(),
-            alert_system=SafetyAlertSystem(),
+            alert_policy=ContextualAlertPolicy(config),
+            scorer=DrowsinessScorer(config),
+            alert_system=SafetyAlertSystem(config),
             monitor=SystemReliabilityMonitor(config),
             consent_manager=ConsentManager(),
             acceleration_profile=acceleration_profile,
@@ -70,8 +72,13 @@ class ArmGuardApplication:
     def run_calibration(self, driver_id: str = "driver-001") -> dict[str, Any]:
         for index, frame in enumerate(self.demo_frames.calibration_frames(), start=1):
             frame = self._with_emulated_telemetry(frame, index)
-            ear = self.pipeline._ear_estimator.calculate_average(frame.left_eye, frame.right_eye)
-            self.profiler.update_and_get_baseline(driver_id=driver_id, ear=ear, context=frame.context)
+            ear = self.pipeline.estimate_average_ear(frame)
+            self.profiler.update_and_get_baseline(
+                driver_id=driver_id,
+                ear=ear,
+                context=frame.context,
+                captured_at=frame.captured_at,
+            )
 
         output = self.profiler.persist_profile(driver_id, self.config.profiles_dir)
         payload = self.profiler.export_profile(driver_id)
@@ -121,7 +128,24 @@ class ArmGuardApplication:
             "bundle": [f"{item.name}: {item.note}" for item in spec.bundle],
         }
 
-    def _event_for(self, frame: object, result: ProcessingResult) -> AnonymizedDetectionEvent:
+    def runtime_telemetry(self, frame_index: int) -> RuntimeTelemetry:
+        snapshot = self.device_emulator.runtime_snapshot(frame_index)
+        return RuntimeTelemetry(
+            source_device=self.config.target_device,
+            cpu_temperature_c=snapshot.cpu_temperature_c,
+            memory_pressure_percent=snapshot.memory_pressure_percent,
+            capture_fps=snapshot.capture_fps,
+            power_draw_watts=snapshot.power_draw_watts,
+        )
+
+    def live_context(self) -> DriverContext:
+        return DriverContext(speed_kph=72, road_type="highway", hour_24=3, ambient_light="night")
+
+    @staticmethod
+    def require_live_dependencies() -> tuple[object, object]:
+        return require_live_dependencies()
+
+    def _event_for(self, frame: DetectionFrame, result: ProcessingResult) -> AnonymizedDetectionEvent:
         detection_frame = frame
         return AnonymizedDetectionEvent(
             timestamp=detection_frame.captured_at.isoformat(),
@@ -135,13 +159,16 @@ class ArmGuardApplication:
             detection_confidence=result.assessment.confidence,
         )
 
-    def _with_emulated_telemetry(self, frame: object, frame_index: int) -> object:
-        snapshot = self.device_emulator.runtime_snapshot(frame_index)
-        telemetry = replace(
-            frame.telemetry,
-            cpu_temperature_c=snapshot.cpu_temperature_c,
-            memory_pressure_percent=snapshot.memory_pressure_percent,
-            capture_fps=snapshot.capture_fps,
-            power_draw_watts=snapshot.power_draw_watts,
-        )
+    def _with_emulated_telemetry(self, frame: DetectionFrame, frame_index: int) -> DetectionFrame:
+        runtime_telemetry = self.runtime_telemetry(frame_index)
+        if frame.telemetry is None:
+            telemetry = runtime_telemetry
+        else:
+            telemetry = replace(
+                frame.telemetry,
+                cpu_temperature_c=runtime_telemetry.cpu_temperature_c,
+                memory_pressure_percent=runtime_telemetry.memory_pressure_percent,
+                capture_fps=runtime_telemetry.capture_fps,
+                power_draw_watts=runtime_telemetry.power_draw_watts,
+            )
         return replace(frame, telemetry=telemetry)

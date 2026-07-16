@@ -16,17 +16,22 @@ class SystemReliabilityMonitor:
         acceleration_backend: str,
         camera_online: bool,
         fallback_mode: bool,
+        consent_withheld: bool,
         capture_fps: float,
         latency_ms: float,
         detection_confidence: float,
         arm_temperature_c: float,
         memory_pressure_percent: float,
         power_draw_watts: float | None,
+        stale_frame_seconds: float | None = None,
     ) -> SystemHealth:
         notes: list[str] = []
         status = SystemStatus.NORMAL
 
-        if not camera_online:
+        if consent_withheld:
+            status = SystemStatus.CONSENT_WITHHELD
+            notes.append("processing blocked by consent policy")
+        elif not camera_online:
             status = SystemStatus.CAMERA_UNAVAILABLE
             notes.append("camera input unavailable")
         elif detection_confidence < self.config.low_confidence_threshold:
@@ -42,6 +47,9 @@ class SystemReliabilityMonitor:
         if capture_fps < self.config.low_fps_threshold:
             status = SystemStatus.PERFORMANCE_DEGRADED
             notes.append("capture FPS below target threshold")
+        if stale_frame_seconds is not None and stale_frame_seconds > self.config.camera_stale_seconds:
+            status = SystemStatus.CAMERA_UNAVAILABLE
+            notes.append("camera frames are stale")
         if fallback_mode:
             notes.append("backup sensors should be engaged")
 

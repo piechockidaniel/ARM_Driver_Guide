@@ -7,8 +7,12 @@ name = "arm-guard"
 version = "0.1.0"
 description = "Privacy-first Python scaffold for an ARM edge drowsiness detection system."
 readme = "README.md"
-requires-python = ">=3.11"
-dependencies = []
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "mediapipe>=0.10.35,<0.11",
+    "opencv-python>=4.13,<5.1",
+    "pillow>=11.3,<12",
+]
 
 [project.scripts]
 arm-guard = "arm_guard.cli:main"

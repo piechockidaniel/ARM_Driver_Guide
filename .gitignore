@@ -1,0 +1,13 @@
+.idea/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+graphify-out/
+demo/output/
+demo/profiles/
+demo/test-no-face.mp4
+assets/models/
+
+.pytest_cache/

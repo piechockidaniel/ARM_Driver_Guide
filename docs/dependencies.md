@@ -2,15 +2,16 @@
 
 Current runtime dependencies:
 
-- Python 3.11+
-- Standard library only for the baseline scaffold
+- Python 3.11
+- OpenCV
+- MediaPipe
+- Pillow
 
-Intentional non-dependencies in this iteration:
+Current constraint:
 
-- No OpenCV yet
-- No MediaPipe yet
-- No ONNX/TFLite runtime yet
+- The live CV path is validated for the local `.venv` on Python 3.11.
+- The current workspace-global interpreter is Python 3.13 and is not the supported path for MediaPipe here.
 
 Reason:
 
-The current implementation focuses on repository structure, privacy behavior, baseline scoring, device targeting, benchmarking seams, and local simulation. A live landmark backend for Orange Pi 5 Plus should be selected deliberately in a later phase.
+This phase moves the project into a real baseline detector with webcam/video input and landmark detection. ONNX/TFLite and Arm-specific optimization are intentionally deferred to later phases.

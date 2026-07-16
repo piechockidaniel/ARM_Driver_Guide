@@ -3,30 +3,44 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from arm_guard.config import AppConfig
 from arm_guard.domain.models import DetectionFrame, DriverContext, Point, RuntimeTelemetry
 
 
 @dataclass(slots=True, frozen=True)
 class ContextualAlertPolicy:
-    def alert_allowed(self, context: DriverContext) -> bool:
-        return context.speed_kph >= 5 and context.consent_granted
+    config: AppConfig
 
-    def risk_multiplier(self, context: DriverContext) -> float:
+    def alert_allowed(self, context: DriverContext) -> bool:
+        return context.speed_kph >= self.config.speed_alert_floor_kph and context.consent_granted
+
+    def detection_sensitivity_multiplier(self, context: DriverContext) -> float:
         multiplier = 1.0
         road = context.road_type.lower()
 
         if road == "residential":
-            multiplier *= 0.8
+            multiplier *= self.config.residential_detection_sensitivity_multiplier
         elif road == "highway":
-            multiplier *= 1.2
+            multiplier *= self.config.highway_detection_sensitivity_multiplier
 
         if 2 <= context.hour_24 <= 5:
-            multiplier *= 0.7
+            multiplier *= self.config.peak_drowsiness_detection_sensitivity_multiplier
 
         return multiplier
 
-    def threshold_multiplier(self, context: DriverContext) -> float:
-        return self.risk_multiplier(context)
+    def scoring_risk_multiplier(self, context: DriverContext) -> float:
+        multiplier = 1.0
+        road = context.road_type.lower()
+
+        if road == "residential":
+            multiplier *= self.config.residential_scoring_risk_multiplier
+        elif road == "highway":
+            multiplier *= self.config.highway_scoring_risk_multiplier
+
+        if 2 <= context.hour_24 <= 5:
+            multiplier *= self.config.peak_drowsiness_scoring_risk_multiplier
+
+        return multiplier
 
 
 @dataclass(slots=True, frozen=True)

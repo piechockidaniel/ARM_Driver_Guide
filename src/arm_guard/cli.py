@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 
+from arm_guard.gui import run_dashboard
+from arm_guard.live import LiveDependencyError, LiveDetectionSession, OpenCVCaptureSource
 from arm_guard.runtime import ArmGuardApplication
 
 
@@ -17,10 +19,15 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--no-log", action="store_true", help="Do not write anonymized event logs.")
     subparsers.add_parser("inspect-config", help="Print the default runtime configuration.")
     subparsers.add_parser("inspect-device", help="Print the current Arm64 target device spec.")
+    subparsers.add_parser("gui", help="Launch the Tkinter dashboard for webcam or video input.")
     calibrate = subparsers.add_parser("calibrate", help="Run simulated driver calibration and persist a local profile.")
     calibrate.add_argument("--driver-id", default="driver-001", help="Local driver identifier used only for anonymized profile derivation.")
     benchmark = subparsers.add_parser("benchmark", help="Run a repeatable simulated benchmark.")
     benchmark.add_argument("--iterations", type=int, default=50, help="Number of simulated frames to process.")
+    live = subparsers.add_parser("live", help="Run the baseline detector against a webcam or video file.")
+    live.add_argument("--camera-index", type=int, default=0, help="Webcam device index.")
+    live.add_argument("--video", help="Path to a video file. If omitted, webcam input is used.")
+    live.add_argument("--max-frames", type=int, default=120, help="Maximum number of frames to process.")
 
     return parser
 
@@ -44,6 +51,35 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "benchmark":
         print(json.dumps(app.run_benchmark(iterations=args.iterations), indent=2))
+        return 0
+
+    if args.command == "gui":
+        return run_dashboard(app)
+
+    if args.command == "live":
+        source = OpenCVCaptureSource(args.video if args.video else args.camera_index)
+        try:
+            session = LiveDetectionSession(app, source)
+            session.open()
+        except LiveDependencyError as exc:
+            parser.error(str(exc))
+
+        processed = 0
+        try:
+            while processed < args.max_frames:
+                result = session.next_frame()
+                processed += 1
+                print(
+                    f"[frame {processed}] score={result.processing.assessment.drowsiness_score:.3f} "
+                    f"alert={result.processing.alert.level.value} "
+                    f"status={result.processing.health.status.value} "
+                    f"fps={result.processing.health.capture_fps:.1f} "
+                    f"latency_ms={result.processing.health.latency_ms:.3f}"
+                )
+                if result.end_of_stream:
+                    break
+        finally:
+            session.close()
         return 0
 
     if args.command == "demo":

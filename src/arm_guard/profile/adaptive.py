@@ -15,6 +15,7 @@ from arm_guard.domain.models import DriverContext
 class DriverLearningState:
     baseline_ear: float
     learning_hours: float = 0.0
+    last_learning_sample_at: datetime | None = None
 
 
 class AdaptiveDriverProfiler:
@@ -26,7 +27,13 @@ class AdaptiveDriverProfiler:
         self._states: dict[str, DriverLearningState] = {}
         self._alert_started_at: dict[str, datetime | None] = {}
 
-    def update_and_get_baseline(self, driver_id: str, ear: float, context: DriverContext) -> float:
+    def update_and_get_baseline(
+        self,
+        driver_id: str,
+        ear: float,
+        context: DriverContext,
+        captured_at: datetime,
+    ) -> float:
         state = self._states.setdefault(
             driver_id,
             DriverLearningState(baseline_ear=self._config.default_baseline_ear),
@@ -36,10 +43,18 @@ class AdaptiveDriverProfiler:
             samples = self._samples[driver_id]
             samples.append(ear)
             state.baseline_ear = sum(samples) / len(samples)
-            state.learning_hours = min(
-                self._config.learning_target_hours,
-                state.learning_hours + (1 / 3600),
-            )
+            if state.last_learning_sample_at is None:
+                elapsed_hours = 0.0
+            else:
+                elapsed_seconds = max(
+                    0.0,
+                    (captured_at - state.last_learning_sample_at).total_seconds(),
+                )
+                elapsed_hours = elapsed_seconds / 3600
+            state.learning_hours = min(self._config.learning_target_hours, state.learning_hours + elapsed_hours)
+            state.last_learning_sample_at = captured_at
+        else:
+            state.last_learning_sample_at = None
 
         return state.baseline_ear
 

@@ -19,6 +19,7 @@ class SystemStatus(StrEnum):
     NORMAL = "normal"
     LOW_CONFIDENCE = "low_confidence"
     CAMERA_UNAVAILABLE = "camera_unavailable"
+    CONSENT_WITHHELD = "consent_withheld"
     PERFORMANCE_DEGRADED = "performance_degraded"
 
 

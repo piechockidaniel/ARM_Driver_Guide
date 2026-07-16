@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 import unittest
+from datetime import timedelta
 from pathlib import Path
 
 
@@ -13,6 +14,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from arm_guard.domain.models import DetectionFrame, DriverContext
 from arm_guard.pipeline.ear import PrivacyPreservingEarEstimator
 from arm_guard.runtime import ArmGuardApplication
 
@@ -39,6 +41,7 @@ class ScaffoldTests(unittest.TestCase):
         self.assertEqual(results[0].alert.level, "none")
         self.assertNotEqual(results[-1].alert.level, "none")
         self.assertTrue(app.config.events_path.exists())
+        self.assertIn("eye aspect ratio below contextual threshold", results[1].assessment.reasons)
 
     def test_demo_events_do_not_store_raw_frames(self) -> None:
         app = ArmGuardApplication.build_default()
@@ -56,6 +59,81 @@ class ScaffoldTests(unittest.TestCase):
         self.assertIn("avg_latency_ms", metrics)
         self.assertIn("p95_latency_ms", metrics)
         self.assertIn("avg_capture_fps", metrics)
+
+    def test_missing_detection_returns_safe_result(self) -> None:
+        app = ArmGuardApplication.build_default()
+        result = app.pipeline.process_missing_detection(
+            driver_id="driver-001",
+            captured_at=app.demo_frames.sample_frames()[0].captured_at,
+            context=app.live_context(),
+            telemetry=app.runtime_telemetry(1),
+            reason="face or eye landmarks not detected",
+        )
+
+        self.assertEqual(result.assessment.drowsiness_score, 0.0)
+        self.assertEqual(result.alert.level, "none")
+
+    def test_consent_blocked_frames_report_consent_withheld(self) -> None:
+        app = ArmGuardApplication.build_default()
+        frame = app.demo_frames.sample_frames()[0]
+        frame = app._with_emulated_telemetry(frame, 1)
+        blocked = DetectionFrame(
+            frame_id=frame.frame_id,
+            driver_id=frame.driver_id,
+            left_eye=frame.left_eye,
+            right_eye=frame.right_eye,
+            captured_at=frame.captured_at,
+            context=DriverContext(
+                speed_kph=frame.context.speed_kph,
+                road_type=frame.context.road_type,
+                hour_24=frame.context.hour_24,
+                ambient_light=frame.context.ambient_light,
+                consent_granted=False,
+            ),
+            detection_confidence=frame.detection_confidence,
+            telemetry=frame.telemetry,
+        )
+
+        result = app.pipeline.process(blocked)
+        self.assertEqual(result.health.status, "consent_withheld")
+        self.assertTrue(result.health.camera_online)
+
+    def test_microsleep_does_not_enable_fallback_mode(self) -> None:
+        app = ArmGuardApplication.build_default()
+        results = app.run_demo(persist_events=False)
+
+        self.assertGreater(results[-1].assessment.microsleep_duration_seconds, 0.0)
+        self.assertFalse(results[-1].health.fallback_mode)
+
+    def test_learning_hours_use_elapsed_timestamps(self) -> None:
+        app = ArmGuardApplication.build_default()
+        frame = app.demo_frames.sample_frames()[0]
+        frame = app._with_emulated_telemetry(frame, 1)
+        app.profiler.update_and_get_baseline(
+            driver_id=frame.driver_id,
+            ear=app.pipeline.estimate_average_ear(frame),
+            context=frame.context,
+            captured_at=frame.captured_at,
+        )
+        later = DetectionFrame(
+            frame_id=frame.frame_id + 1,
+            driver_id=frame.driver_id,
+            left_eye=frame.left_eye,
+            right_eye=frame.right_eye,
+            captured_at=frame.captured_at + timedelta(seconds=10),
+            context=frame.context,
+            detection_confidence=frame.detection_confidence,
+            telemetry=frame.telemetry,
+        )
+        app.profiler.update_and_get_baseline(
+            driver_id=later.driver_id,
+            ear=app.pipeline.estimate_average_ear(later),
+            context=later.context,
+            captured_at=later.captured_at,
+        )
+        profile = app.profiler.export_profile(frame.driver_id)
+
+        self.assertAlmostEqual(profile["learning_hours"], round(10 / 3600, 4))
 
     def test_cli_demo_command(self) -> None:
         completed = subprocess.run(
