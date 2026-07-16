@@ -1,6 +1,20 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "arm-driver-guide"
+name = "arm-guard"
 version = "0.1.0"
-description = "Add your description here"
+description = "Privacy-first Python scaffold for an ARM edge drowsiness detection system."
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
+
+[project.scripts]
+arm-guard = "arm_guard.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

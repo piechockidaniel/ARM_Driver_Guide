@@ -1,0 +1,24 @@
+{
+  "device": "Orange Pi 5 Plus",
+  "scenario": "night-highway-drowsiness-demo",
+  "frames": [
+    {
+      "speed_kph": 78,
+      "road_type": "highway",
+      "hour_24": 8,
+      "ambient_light": "day"
+    },
+    {
+      "speed_kph": 84,
+      "road_type": "highway",
+      "hour_24": 3,
+      "ambient_light": "night"
+    },
+    {
+      "speed_kph": 86,
+      "road_type": "highway",
+      "hour_24": 3,
+      "ambient_light": "night"
+    }
+  ]
+}

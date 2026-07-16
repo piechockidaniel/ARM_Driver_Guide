@@ -1,16 +1,17 @@
-# This is a sample Python script.
+from __future__ import annotations
 
-# Press Ctrl+F5 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press F9 to toggle the breakpoint.
+import sys
+from pathlib import Path
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+ROOT = Path(__file__).resolve().parent
+SRC = ROOT / "src"
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from arm_guard.cli import main
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
