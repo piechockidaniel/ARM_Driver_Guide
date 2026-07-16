@@ -5,6 +5,7 @@ from statistics import fmean
 from typing import Any
 
 from arm_guard.arm.acceleration import ArmAccelerationProfile
+from arm_guard.arm.registry import DetectorBackendRegistry, build_default_detector_backend_registry
 from arm_guard.config import AppConfig
 from arm_guard.device.specs import OrangePi5PlusEmulator, orange_pi_5_plus_spec
 from arm_guard.domain.models import DetectionFrame, DriverContext, RuntimeTelemetry
@@ -30,6 +31,7 @@ class ArmGuardApplication:
     profiler: AdaptiveDriverProfiler
     event_logger: EventLogger
     device_emulator: OrangePi5PlusEmulator
+    detector_backend_registry: DetectorBackendRegistry
 
     @classmethod
     def build_default(cls) -> "ArmGuardApplication":
@@ -55,6 +57,10 @@ class ArmGuardApplication:
             profiler=profiler,
             event_logger=EventLogger(config.events_path),
             device_emulator=OrangePi5PlusEmulator(),
+            detector_backend_registry=build_default_detector_backend_registry(
+                config.face_landmarker_model_path,
+                config.face_landmarker_model_url,
+            ),
         )
 
     def run_demo(self, *, persist_events: bool = True) -> list[ProcessingResult]:
@@ -85,7 +91,7 @@ class ArmGuardApplication:
         payload["output_path"] = str(output)
         return payload
 
-    def run_benchmark(self, *, iterations: int = 50) -> dict[str, float]:
+    def run_benchmark(self, *, iterations: int = 50) -> dict[str, object]:
         latencies: list[float] = []
         fps_values: list[float] = []
         memory_values: list[float] = []
@@ -104,12 +110,20 @@ class ArmGuardApplication:
         ordered = sorted(latencies)
         p95_index = max(0, min(len(ordered) - 1, round(len(ordered) * 0.95) - 1))
         return {
+            "benchmark_backend": "python-simulated-baseline",
+            "capture_backend": "simulated-frame-factory",
+            "landmark_backend": "synthetic-landmark-fixture",
+            "feature_backend": "python-ear-scoring",
+            "acceleration_profile": self.acceleration_profile.summary(),
             "avg_latency_ms": round(fmean(latencies), 3),
             "p95_latency_ms": round(ordered[p95_index], 3),
             "avg_capture_fps": round(fmean(fps_values), 3),
             "avg_memory_pressure_percent": round(fmean(memory_values), 3),
             "avg_power_draw_watts": round(fmean(power_values), 3) if power_values else 0.0,
         }
+
+    def benchmark_cases(self, *, iterations: int = 50) -> list[dict[str, object]]:
+        return [self.run_benchmark(iterations=iterations)]
 
     def inspect_device(self) -> dict[str, Any]:
         spec = orange_pi_5_plus_spec()
@@ -144,6 +158,12 @@ class ArmGuardApplication:
     @staticmethod
     def require_live_dependencies() -> tuple[object, object]:
         return require_live_dependencies()
+
+    def create_detector_backend(self, name: str | None = None) -> object:
+        return self.detector_backend_registry.create(name)
+
+    def available_detector_backends(self) -> list[dict[str, str]]:
+        return self.detector_backend_registry.describe()
 
     def _event_for(self, frame: DetectionFrame, result: ProcessingResult) -> AnonymizedDetectionEvent:
         detection_frame = frame

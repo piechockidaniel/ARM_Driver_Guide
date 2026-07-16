@@ -37,6 +37,10 @@ class MediaPipeFaceMeshBackend:
         )
         self._mesh = mp.tasks.vision.FaceLandmarker.create_from_options(options)
 
+    @property
+    def backend_name(self) -> str:
+        return "mediapipe-face-landmarker"
+
     def detect(self, frame_bgr: object, *, timestamp_ms: int) -> LandmarkObservation | None:
         cv2, _ = require_live_dependencies()
         image_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)

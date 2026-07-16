@@ -3,30 +3,33 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime
 
+from arm_guard.arm.contracts import CaptureBackend, LandmarkDetectorBackend
 from arm_guard.domain.models import DetectionFrame
 from arm_guard.events.models import AnonymizedDetectionEvent
-from arm_guard.live.mediapipe_backend import MediaPipeFaceMeshBackend
-from arm_guard.live.sources import OpenCVCaptureSource
 from arm_guard.pipeline.engine import ProcessingResult
 
 
 @dataclass(slots=True, frozen=True)
 class LiveFrameResult:
     source_label: str
+    detector_backend: str
     frame_rgb: object | None
     processing: ProcessingResult
     end_of_stream: bool = False
 
 
 class LiveDetectionSession:
-    def __init__(self, app: object, source: OpenCVCaptureSource, driver_id: str = "live-driver") -> None:
+    def __init__(
+        self,
+        app: object,
+        source: CaptureBackend,
+        detector_backend_name: str | None = None,
+        driver_id: str = "live-driver",
+    ) -> None:
         self._app = app
         self._source = source
         self._driver_id = driver_id
-        self._backend = MediaPipeFaceMeshBackend(
-            model_path=app.config.face_landmarker_model_path,
-            model_url=app.config.face_landmarker_model_url,
-        )
+        self._backend: LandmarkDetectorBackend = app.create_detector_backend(detector_backend_name)
         self._frame_index = 0
         self._opened = False
 
@@ -42,6 +45,7 @@ class LiveDetectionSession:
         if not ok or frame_bgr is None:
             return LiveFrameResult(
                 source_label=self._source.describe(),
+                detector_backend=self._backend.backend_name,
                 frame_rgb=None,
                 processing=self._app.pipeline.process_missing_detection(
                     driver_id=self._driver_id,
@@ -91,6 +95,7 @@ class LiveDetectionSession:
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         return LiveFrameResult(
             source_label=self._source.describe(),
+            detector_backend=self._backend.backend_name,
             frame_rgb=frame_rgb,
             processing=processing,
         )

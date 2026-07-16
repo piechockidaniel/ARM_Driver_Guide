@@ -6,7 +6,9 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
-from arm_guard.live import LiveDependencyError, LiveDetectionSession, OpenCVCaptureSource
+from arm_guard.live.deps import LiveDependencyError
+from arm_guard.live.session import LiveDetectionSession
+from arm_guard.live.sources import Esp32HttpCaptureSource, OpenCVCaptureSource
 
 
 class ArmGuardDashboard:
@@ -45,7 +47,12 @@ class ArmGuardDashboard:
         controls.pack(fill="x", pady=(0, 12))
         ttk.Button(controls, text="Start Webcam", command=self._start_webcam).pack(side="left")
         ttk.Button(controls, text="Open Video", command=self._open_video).pack(side="left", padx=8)
-        ttk.Button(controls, text="Stop", command=self._stop_session).pack(side="left")
+        ttk.Button(controls, text="Connect ESP32-CAM", command=self._start_esp32_camera).pack(side="left")
+        ttk.Button(controls, text="Stop", command=self._stop_session).pack(side="left", padx=(8, 0))
+
+        self.esp32_url_var = tk.StringVar(value=self._app.config.default_esp32_camera_url)
+        ttk.Label(controls, text="ESP32 URL:").pack(side="left", padx=(18, 6))
+        ttk.Entry(controls, textvariable=self.esp32_url_var, width=28).pack(side="left")
 
         body = ttk.Frame(container)
         body.pack(fill="both", expand=True)
@@ -91,7 +98,20 @@ class ArmGuardDashboard:
         if path:
             self._start_session(OpenCVCaptureSource(Path(path).as_posix()))
 
-    def _start_session(self, source: OpenCVCaptureSource) -> None:
+    def _start_esp32_camera(self) -> None:
+        url = self.esp32_url_var.get().strip()
+        if not url:
+            messagebox.showerror("ARM-Guard", "Provide the ESP32-CAM base URL before starting.")
+            return
+        self._start_session(
+            Esp32HttpCaptureSource(
+                source=url,
+                capture_path=self._app.config.esp32_camera_capture_path,
+                timeout_seconds=self._app.config.esp32_camera_timeout_seconds,
+            )
+        )
+
+    def _start_session(self, source: object) -> None:
         self._stop_session()
         self._app.event_logger.reset()
         try:
@@ -118,7 +138,7 @@ class ArmGuardDashboard:
 
     def _update_status(self, result: object) -> None:
         processing = result.processing
-        self.source_var.set(f"source: {result.source_label}")
+        self.source_var.set(f"source: {result.source_label} [{result.detector_backend}]")
         self.score_var.set(f"score: {processing.assessment.drowsiness_score:.3f}")
         self.alert_var.set(f"alert: {processing.alert.level.value}")
         self.status_var.set(f"status: {processing.health.status.value}")

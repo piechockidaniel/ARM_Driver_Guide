@@ -4,8 +4,10 @@ import json
 import subprocess
 import sys
 import unittest
+from base64 import b64decode
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +17,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from arm_guard.domain.models import DetectionFrame, DriverContext
+from arm_guard.live.sources import Esp32HttpCaptureSource
 from arm_guard.pipeline.ear import PrivacyPreservingEarEstimator
 from arm_guard.runtime import ArmGuardApplication
 
@@ -56,9 +59,19 @@ class ScaffoldTests(unittest.TestCase):
         app = ArmGuardApplication.build_default()
         metrics = app.run_benchmark(iterations=10)
 
+        self.assertEqual(metrics["benchmark_backend"], "python-simulated-baseline")
+        self.assertEqual(metrics["capture_backend"], "simulated-frame-factory")
         self.assertIn("avg_latency_ms", metrics)
         self.assertIn("p95_latency_ms", metrics)
         self.assertIn("avg_capture_fps", metrics)
+
+    def test_detector_backend_registry_exposes_default_backend(self) -> None:
+        app = ArmGuardApplication.build_default()
+        backends = app.available_detector_backends()
+
+        self.assertGreaterEqual(len(backends), 1)
+        self.assertEqual(backends[0]["name"], "mediapipe-face-landmarker")
+        self.assertEqual(backends[0]["default"], "true")
 
     def test_missing_detection_returns_safe_result(self) -> None:
         app = ArmGuardApplication.build_default()
@@ -147,6 +160,48 @@ class ScaffoldTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("Acceleration profile:", completed.stdout)
         self.assertIn("Target device:", completed.stdout)
+
+    def test_esp32_capture_source_decodes_snapshot(self) -> None:
+        jpeg_payload = b64decode(
+            "/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEBUQEBAVFRUVFRUVFRUVFRUVFRUVFhUXFhUV"
+            "FRUYHSggGBolHRUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0t"
+            "LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAAEAAQMBIgACEQEDEQH/"
+            "xAAbAAEAAgMBAQAAAAAAAAAAAAAABQYBAwQCB//EADcQAAIBAgQDBgQEBgMBAAAAAAECAwQRAAUS"
+            "ITFBUQYTImFxgZEUMpGhsQcjQlLR8BVCYnKSorLx/8QAGQEAAwEBAQAAAAAAAAAAAAAAAAECAwQF"
+            "/8QAJBEAAgICAgICAwEAAAAAAAAAAAECEQMhEjEEE0FRImFxFDL/2gAMAwEAAhEDEQA/APk6KKKK"
+            "AP/Z"
+        )
+        expected_frame = object()
+
+        class FakeCv2:
+            IMREAD_COLOR = 1
+
+            @staticmethod
+            def imdecode(payload: object, flag: int) -> object:
+                self.assertEqual(flag, 1)
+                self.assertIsNotNone(payload)
+                return expected_frame
+
+        class FakeResponse:
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return jpeg_payload
+
+        source = Esp32HttpCaptureSource("http://192.168.4.1", timeout_seconds=1.0)
+
+        with patch("arm_guard.live.sources.require_live_dependencies", return_value=(FakeCv2(), object())):
+            with patch("arm_guard.live.sources.urlopen", return_value=FakeResponse()):
+                source.open()
+                ok, frame, _ = source.read()
+
+        self.assertTrue(ok)
+        self.assertIs(frame, expected_frame)
+        self.assertEqual(source.describe(), "esp32-cam:192.168.4.1")
 
 
 if __name__ == "__main__":
