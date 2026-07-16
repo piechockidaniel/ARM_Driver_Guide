@@ -5,7 +5,7 @@ ARM-Guard is a privacy-first drowsiness-detection prototype targeted at Arm64 ed
 The repository now covers two baseline modes:
 
 - simulated pipeline for repeatable scoring, calibration, benchmarking, and privacy tests
-- live baseline detector using `OpenCV + MediaPipe FaceMesh` with a `Tkinter` GUI for webcam or video-file input
+- live baseline detector using `OpenCV + MediaPipe FaceMesh` with a `Tkinter` GUI for webcam, video-file, or `ESP32-CAM` snapshot input
 
 ## Python requirement
 
@@ -34,9 +34,13 @@ On Windows, the expected command path is:
 .venv\Scripts\python.exe main.py gui
 .venv\Scripts\python.exe main.py live --camera-index 0 --max-frames 120
 .venv\Scripts\python.exe main.py live --video path\to\video.mp4 --max-frames 300
+.venv\Scripts\python.exe main.py live --esp32-url http://192.168.4.1 --max-frames 120
 .venv\Scripts\python.exe main.py demo
 .venv\Scripts\python.exe main.py benchmark --iterations 100
 ```
+
+For `ESP32-CAM`, this build expects the board to expose single JPEG snapshots on `/capture`, which matches the standard `CameraWebServer` firmware flow.
+Setup notes for this path are in [docs/esp32-cam-setup.md](/C:/Users/user/source/repos/ARM_Driver_Guide/docs/esp32-cam-setup.md).
 
 ## Repository layout
 
@@ -64,6 +68,7 @@ tests/                  Smoke and behavior tests
 
 - webcam input
 - video-file input
+- `ESP32-CAM` HTTP snapshot input
 - face and eye landmark detection through MediaPipe FaceMesh
 - EAR computation from landmarks
 - long-blink and microsleep-like event handling

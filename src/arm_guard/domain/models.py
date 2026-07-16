@@ -23,6 +23,7 @@ class SystemStatus(StrEnum):
     PERFORMANCE_DEGRADED = "performance_degraded"
 
 
+
 @dataclass(slots=True, frozen=True)
 class DriverContext:
     speed_kph: float

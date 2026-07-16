@@ -9,6 +9,9 @@ class AppConfig:
     project_name: str = "ARM-Guard"
     target_device: str = "Orange Pi 5 Plus (RK3588)"
     default_camera_index: int = 0
+    default_esp32_camera_url: str = "http://192.168.4.1"
+    esp32_camera_capture_path: str = "/capture"
+    esp32_camera_timeout_seconds: float = 5.0
     gui_refresh_ms: int = 30
     face_landmarker_model_path: Path = Path("assets/models/face_landmarker.task")
     face_landmarker_model_url: str = (

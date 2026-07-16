@@ -16,4 +16,4 @@ from arm_guard.runtime import ArmGuardApplication
 
 if __name__ == "__main__":
     app = ArmGuardApplication.build_default()
-    print(json.dumps(app.run_benchmark(iterations=100), indent=2))
+    print(json.dumps(app.benchmark_cases(iterations=100), indent=2))
